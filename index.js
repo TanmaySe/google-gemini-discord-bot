@@ -96,12 +96,14 @@ client.on(Events.MessageCreate, async (message) => {
     const isDM = message.channel.type === ChannelType.DM;
 
     if (isDM || message.mentions.users.has(client.user.id)) {
-      const messageContent = message.content.replace(new RegExp(`<@!?${client.user.id}>`), '').trim();
+      let messageContent = message.content.replace(new RegExp(`<@!?${client.user.id}>`), '').trim();
 
       if (messageContent === '') {
         await message.reply("> `It looks like you didn't say anything. What would you like to talk about?`");
         return;
       }
+
+      //messageContent = "Query : " + messageContent + " "+ "If the query is health/fitness related then only respond.Else say that i can answer only health related queries."
 
       conversationQueue.push({ message, messageContent });
     }
