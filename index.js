@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const { Client, GatewayIntentBits, ChannelType, Events, ActivityType } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, Events, ActivityType,GuildMessageManager } = require('discord.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { config } = require('./config');
 const { ConversationManager } = require('./conversationManager');
@@ -9,7 +9,7 @@ const async = require('async');
 
 const app = express();
 const port = process.env.PORT || 4000;
-
+const botToken = process.env.DISCORD_BOT_TOKEN
 app.get('/', (req, res) => {
   res.send('Gemini Discord Bot is running!');
 });
@@ -26,7 +26,7 @@ const client = new Client({
     GatewayIntentBits.DirectMessages,
   ],
 });
-
+const channel = client.channels.cache.get("1263422210517766220");
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 const conversationManager = new ConversationManager();
 const commandHandler = new CommandHandler();
@@ -75,8 +75,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.commandName === 'save') {
+
     try {
-      await commandHandler.saveCommand(interaction, [], conversationManager);
+      const Authorization = "Bot" + " " + botToken
+      const messageReq = await fetch(`https://discord.com/api/v10/channels/1263422210517766220/messages`, {
+        headers: {
+            'Authorization': Authorization
+        }
+      });
+      const data = await messageReq.json()
+      console.log(data)
+      
+      //await commandHandler.saveCommand(interaction, [], conversationManager);
     } catch (error) {
       console.error('Error handling /save command:', error);
       try {
@@ -92,6 +102,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 client.on(Events.MessageCreate, async (message) => {
   try {
     if (message.author.bot) return;
+    console.log(message)
 
     const isDM = message.channel.type === ChannelType.DM;
 
@@ -103,7 +114,7 @@ client.on(Events.MessageCreate, async (message) => {
         return;
       }
 
-      //messageContent = "Query : " + messageContent + " "+ "If the query is health/fitness related then only respond.Else say that i can answer only health related queries."
+      messageContent = "Query : " + messageContent + " "+ "If the query is health/fitness related then only respond.Else say that i can answer only health related queries."
 
       conversationQueue.push({ message, messageContent });
     }
