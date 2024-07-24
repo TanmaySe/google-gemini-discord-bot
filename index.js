@@ -65,6 +65,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isCommand()) return;
   if (interaction.commandName === 'clear') {
     try {
+      console.log(interaction.user.id)
       conversationManager.clearHistory(interaction.user.id);
       await interaction.reply('Your conversation history has been cleared.');
     } catch (error) {
@@ -88,14 +89,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
       const data = await messageReq.json()
       let filteredArray = [];
+      console.log(data)
       for (let obj of data) {
-        let filteredObj = {
-          user_id: obj.author.id,
-          author: obj.author.username,
-          message: obj.content,
-          timestamp: obj.timestamp
-        };
-        filteredArray.push(filteredObj);
+        if(obj.author.username != "FitnessCoach"){
+          let filteredObj = {
+            user_id: obj.author.id,
+            author: obj.author.username,
+            message: obj.content,
+            timestamp: obj.timestamp
+          };
+          filteredArray.push(filteredObj);
+
+        }
+        
       }
       filteredArray.reverse()
       const storeInDatabase = await fetch("http://localhost:3000/chats", {
@@ -122,20 +128,50 @@ client.on(Events.InteractionCreate, async (interaction) => {
 client.on(Events.MessageCreate, async (message) => {
   try {
     if (message.author.bot) return;
-    
+
+    console.log("This is message : ",message)
+
+    const response = await fetch(`http://localhost:3000/chats/chat?userId=${message.author.id}`);
+
+    const data = await response.json();
+
+    console.log(data)
+
+    let finalQuery = ""
+
+    data.forEach(item => {
+      finalQuery += item.message + '.'
+    });
+
+    console.log(finalQuery);
+
+    const storeInDatabase = await fetch("http://localhost:3000/chats", {
+      method: 'POST',
+      headers: {
+          'Content-Type': 'application/json',
+      },
+      body: JSON.stringify([{
+        user_id:message.author.id,
+        author:message.author.username,
+        message:message.content,
+        message_id:message.id
+      }]),
+    });
+
+
 
     const isDM = message.channel.type === ChannelType.DM;
-
+    
     if (isDM || message.mentions.users.has(client.user.id)) {
       let messageContent = message.content.replace(new RegExp(`<@!?${client.user.id}>`), '').trim();
-
+      
       if (messageContent === '') {
         await message.reply("> `It looks like you didn't say anything. What would you like to talk about?`");
         return;
       }
-
-      messageContent = "Query : " + messageContent + " "+ "If the query is health/fitness related then only respond.Else say that i can answer only health related queries."
-
+      console.log("history check krte hai : ",finalQuery)
+      messageContent = "Context for generating answer : " + finalQuery + "Query : " + messageContent + " "+ "If the query is health/fitness related then only respond.Else say that i can answer only health related queries.Answer in about 1000 characters"
+ 
       conversationQueue.push({ message, messageContent });
     }
   } catch (error) {
