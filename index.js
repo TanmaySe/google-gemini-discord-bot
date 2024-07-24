@@ -8,8 +8,13 @@ const { CommandHandler } = require('./commandHandler');
 const async = require('async');
 
 const app = express();
-const port = process.env.PORT || 4000;
+const port = process.env.PORT || 3000;
 const botToken = process.env.DISCORD_BOT_TOKEN
+const mysql = require('mysql');
+const chatsRoute = require("./routes/chatsRoute")
+app.use('/chats',chatsRoute)
+// Create a MySQL connection pool
+
 app.get('/', (req, res) => {
   res.send('Gemini Discord Bot is running!');
 });
@@ -26,7 +31,7 @@ const client = new Client({
     GatewayIntentBits.DirectMessages,
   ],
 });
-const channel = client.channels.cache.get("1263422210517766220");
+const channel = client.channels.cache.get("1265532368882499675");
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 const conversationManager = new ConversationManager();
 const commandHandler = new CommandHandler();
@@ -58,7 +63,6 @@ client.once(Events.ClientReady, () => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isCommand()) return;
-
   if (interaction.commandName === 'clear') {
     try {
       conversationManager.clearHistory(interaction.user.id);
@@ -75,16 +79,32 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.commandName === 'save') {
-
     try {
       const Authorization = "Bot" + " " + botToken
-      const messageReq = await fetch(`https://discord.com/api/v10/channels/1263422210517766220/messages`, {
+      const messageReq = await fetch(`https://discord.com/api/v10/channels/1265532368882499675/messages`, {
         headers: {
             'Authorization': Authorization
         }
       });
       const data = await messageReq.json()
-      console.log(data)
+      let filteredArray = [];
+      for (let obj of data) {
+        let filteredObj = {
+          user_id: obj.author.id,
+          author: obj.author.username,
+          message: obj.content,
+          timestamp: obj.timestamp
+        };
+        filteredArray.push(filteredObj);
+      }
+      filteredArray.reverse()
+      const storeInDatabase = await fetch("http://localhost:3000/chats", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(filteredArray),
+      });
       
       //await commandHandler.saveCommand(interaction, [], conversationManager);
     } catch (error) {
@@ -102,7 +122,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 client.on(Events.MessageCreate, async (message) => {
   try {
     if (message.author.bot) return;
-    console.log(message)
+    
 
     const isDM = message.channel.type === ChannelType.DM;
 
