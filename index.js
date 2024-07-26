@@ -5,6 +5,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { config } = require('./config');
 const { ConversationManager } = require('./conversationManager');
 const { CommandHandler } = require('./commandHandler');
+const processConversation = require("./processConversation")
 const async = require('async');
 
 const app = express();
@@ -79,42 +80,43 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
-  if (interaction.commandName === 'save') {
+  if (interaction.commandName === 'analyze') {
     try {
-      const Authorization = "Bot" + " " + botToken
-      const messageReq = await fetch(`https://discord.com/api/v10/channels/1265532368882499675/messages`, {
-        headers: {
-            'Authorization': Authorization
-        }
-      });
-      const data = await messageReq.json()
-      let filteredArray = [];
-      console.log(data)
-      for (let obj of data) {
-        if(obj.author.username != "FitnessCoach"){
-          let filteredObj = {
-            user_id: obj.author.id,
-            author: obj.author.username,
-            message: obj.content,
-            timestamp: obj.timestamp
-          };
-          filteredArray.push(filteredObj);
+      // const Authorization = "Bot" + " " + botToken
+      // const messageReq = await fetch(`https://discord.com/api/v10/channels/1265532368882499675/messages`, {
+      //   headers: {
+      //       'Authorization': Authorization
+      //   }
+      // });
+      // const data = await messageReq.json()
+      // let filteredArray = [];
+      // console.log(data)
+      // for (let obj of data) {
+      //   if(obj.author.username != "FitnessCoach"){
+      //     let filteredObj = {
+      //       user_id: obj.author.id,
+      //       author: obj.author.username,
+      //       message: obj.content,
+      //       timestamp: obj.timestamp
+      //     };
+      //     filteredArray.push(filteredObj);
 
-        }
+      //   }
         
-      }
-      filteredArray.reverse()
-      const storeInDatabase = await fetch("http://localhost:3000/chats", {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(filteredArray),
-      });
-      
-      //await commandHandler.saveCommand(interaction, [], conversationManager);
+      // }
+      // filteredArray.reverse()
+      // const storeInDatabase = await fetch("http://localhost:3000/chats", {
+      //   method: 'POST',
+      //   headers: {
+      //       'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify(filteredArray),
+      // });S
+      console.log("interaction : ",interaction.reply)
+      await commandHandler.analyzeCommand(interaction, [], conversationManager);
+
     } catch (error) {
-      console.error('Error handling /save command:', error);
+      console.error('Error handling /analyze command:', error);
       try {
         await interaction.reply('Sorry, something went wrong while saving your conversation.');
       } catch (replyError) {
@@ -126,12 +128,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.MessageCreate, async (message) => {
+  //First gather past conversation history wrt channel and userId.Then store the chat in database.
   try {
     if (message.author.bot) return;
 
-    console.log("This is message : ",message)
+    //console.log("This is channel : ",message.channelId)
 
-    const response = await fetch(`http://localhost:3000/chats/chat?userId=${message.author.id}`);
+    const response = await fetch(`http://localhost:3000/chats/chat?userId=${message.author.id}&channelId=${message.channelId}`);
 
     const data = await response.json();
 
@@ -154,7 +157,8 @@ client.on(Events.MessageCreate, async (message) => {
         user_id:message.author.id,
         author:message.author.username,
         message:message.content,
-        message_id:message.id
+        message_id:message.id,
+        channelId:message.channelId,
       }]),
     });
 
@@ -169,10 +173,10 @@ client.on(Events.MessageCreate, async (message) => {
         await message.reply("> `It looks like you didn't say anything. What would you like to talk about?`");
         return;
       }
-      console.log("history check krte hai : ",finalQuery)
-      messageContent = "Context for generating answer : " + finalQuery + "Query : " + messageContent + " "+ "If the query is health/fitness related then only respond.Else say that i can answer only health related queries.Answer in about 1000 characters"
- 
-      conversationQueue.push({ message, messageContent });
+      
+      messageContent = "MyFitnessHistory: {" + finalQuery + "} currentFitnessQuery:{" + messageContent + "} "+ "If the currentFitnessQuery DOES NOT requires context then don't consider MyFitnessHistory .If the query is health/fitness related then only respond.Else say that i can answer only health related queries. Additonally Answer in about 1000 characters always"
+    
+      conversationQueue.push({ message, messageContent,analyze:false });
     }
   } catch (error) {
     console.error('Error processing the message:', error);
@@ -180,46 +184,5 @@ client.on(Events.MessageCreate, async (message) => {
   }
 });
 
-async function processConversation({ message, messageContent }) {
-  try {
-    const typingInterval = 2000;
-    let typingIntervalId;
-
-    // Start the typing indicator
-    const startTyping = async () => {
-      typingIntervalId = setInterval(() => {
-        message.channel.sendTyping();
-      }, typingInterval);
-    };
-
-    // Stop the typing indicator
-    const stopTyping = () => {
-      clearInterval(typingIntervalId);
-    };
-
-    await startTyping();
-
-    const model = await genAI.getGenerativeModel({ model: config.modelName });
-    const chat = model.startChat({
-      history: conversationManager.getHistory(message.author.id),
-      safetySettings: config.safetySettings,
-    });
-    const botMessage = await message.reply('> `Generating a response...`');
-    await conversationManager.handleModelResponse(botMessage, () => chat.sendMessageStream(messageContent), message);
-    
-    await stopTyping();
-    
-    // Check if it's a new conversation or the bot is mentioned
-    if (conversationManager.isNewConversation(message.author.id) || message.mentions.users.has(client.user.id)) {
-      const clearCommandMessage = `
-        > **Remember to use the \`/clear\` command to start a new conversation when needed. This helps to maintain context and ensures that the AI responds accurately to your messages.**
-      `;
-      await message.channel.send(clearCommandMessage);
-    }
-  } catch (error) {
-    console.error('Error processing the conversation:', error);
-    await message.reply('Sorry, something went wrong!');
-  }
-}
 
 client.login(process.env.DISCORD_BOT_TOKEN);
