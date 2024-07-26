@@ -45,7 +45,7 @@ class CommandHandler {
         finalQuery += item.author + " says : " + item.message + 'at time : ' + item.created_at + ".";
       });
   
-      let messageContent = "Messages from discord channel: " + finalQuery + ".Give one-liner author wise analysis of workout statistics.Make sure that word limit is 1000 words";
+      let messageContent = "Messages from discord channel: " + finalQuery + ".Aggregate the workout stats of every user while classifying these activities into categories. I want only stats. Also,ignore random conversation.Don't give dates.";
   
       // Push a task into the queue
       
