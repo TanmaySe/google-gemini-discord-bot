@@ -146,7 +146,7 @@ client.on(Events.MessageCreate, async (message) => {
       finalQuery += item.message + '.'
     });
 
-    console.log(finalQuery);
+    console.log(" message : ",message);
 
     const storeInDatabase = await fetch("http://localhost:3000/chats", {
       method: 'POST',

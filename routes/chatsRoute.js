@@ -48,7 +48,7 @@ router.get('/chat', (req, res) => {
     }
     else if(!userId && channelId){
 
-        const sql = 'SELECT message FROM chats WHERE channel_id = ?';
+        const sql = 'SELECT author,created_at,message FROM chats WHERE channel_id = ?';
     
         pool.query(sql, [channelId], (error, results) => {
             if (error) {

@@ -31,10 +31,10 @@ class CommandHandler {
     await message.reply('> `Your conversation history has been cleared.`');
   }
 
-  async analyzeCommand(interaction, args, conversationManager) {
+  async analyzeCommand(message, args, conversationManager) {
     const conversationQueue = async.queue(processConversation, 1);
   
-    const channelId = interaction.channelId;
+    const channelId = message.channelId;
   
     try {
       const response = await fetch(`http://localhost:3000/chats/chat?channelId=${channelId}`);
@@ -42,18 +42,18 @@ class CommandHandler {
   
       let finalQuery = "";
       data.forEach(item => {
-        finalQuery += item.message + '.';
+        finalQuery += item.author + " says : " + item.message + 'at time : ' + item.created_at + ".";
       });
   
-      let messageContent = "Messages from discord channel: " + finalQuery + ".Your task is to analyze these messages.s ";
+      let messageContent = "Messages from discord channel: " + finalQuery + ".Give one-liner author wise analysis of workout statistics.Make sure that word limit is 1000 words";
   
       // Push a task into the queue
       
-      conversationQueue.push({ interaction, messageContent,analyze:true });
+      conversationQueue.push({ message, messageContent,analyze:true });
       console.log("52")
     } catch (error) {
       console.error('Error fetching or processing data:', error);
-      await interaction.reply('> `Failed to analyze messages. Please try again later.`');
+      await message.reply('> `Failed to analyze messages. Please try again later.`');
     }
   }
   
