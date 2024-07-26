@@ -102,6 +102,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         }
         
+<<<<<<< Updated upstream
       }
       filteredArray.reverse()
       const storeInDatabase = await fetch("http://localhost:3000/chats", {
@@ -113,6 +114,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
       
       //await commandHandler.saveCommand(interaction, [], conversationManager);
+=======
+      // }
+      // filteredArray.reverse()
+      // const storeInDatabase = await fetch("http://localhost:3000/chats", {
+      //   method: 'POST',
+      //   headers: {
+      //       'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify(filteredArray),
+      // });S
+      console.log("interaction : ",typeof interaction.reply)
+      await commandHandler.analyzeCommand(interaction, [], conversationManager);
+
+>>>>>>> Stashed changes
     } catch (error) {
       console.error('Error handling /save command:', error);
       try {

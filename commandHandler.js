@@ -29,6 +29,7 @@ class CommandHandler {
     await message.reply('> `Your conversation history has been cleared.`');
   }
 
+<<<<<<< Updated upstream
   async saveCommand(interaction, args, conversationManager) {
     const userId = interaction.user.id;
     const conversation = conversationManager.getHistory(userId);
@@ -46,6 +47,12 @@ class CommandHandler {
     const conversationText = conversation
       .map(line => `${line.role === 'user' ? 'User' : 'Bot'}: ${line.parts[0].text}`)
       .join('\n');
+=======
+  async analyzeCommand(message, args, conversationManager) {
+    const conversationQueue = async.queue(processConversation, 1);
+  
+    const channelId = message.channelId;
+>>>>>>> Stashed changes
   
     try {
       const maxLength = 1900;
@@ -66,6 +73,7 @@ class CommandHandler {
         chunks.push(currentChunk);
       }
   
+<<<<<<< Updated upstream
       // Send each chunk as a separate message
       for (const [index, chunk] of chunks.entries()) {
         await interaction.user.send(`Here is your saved conversation (part ${index + 1}):` +
@@ -76,6 +84,15 @@ class CommandHandler {
     } catch (error) {
       console.error('Error sending conversation to user:', error);
       await interaction.reply('> `Failed to send the conversation to your inbox. Please check your privacy settings.`');
+=======
+      // Push a task into the queue
+      
+      conversationQueue.push({message, messageContent,analyze:true });
+      console.log("52")
+    } catch (error) {
+      console.error('Error fetching or processing data:', error);
+      //await interaction.reply('> `Failed to analyze messages. Please try again later.`');
+>>>>>>> Stashed changes
     }
   }
 }
