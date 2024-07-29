@@ -78,6 +78,8 @@ async function processConversation({ message, messageContent, analyze }) {
             // Split the response into chunks of 2000 characters or less
             const chunks = splitIntoChunks(finalResponse, 1000);
 
+            console.log("chunks : ",chunks)
+
             finalResponse = ""
 
             // Edit the reply with each chunk

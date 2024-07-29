@@ -67,8 +67,8 @@ router.post('/', (req, res) => {
     const data = req.body; 
     console.log(data)
     
-    const sql = 'INSERT INTO chats (user_id, author, message,message_id,channel_id) VALUES ?';
-    const values = data.map(obj => [obj.user_id, obj.author, obj.message,obj.message_id,obj.channelId]); 
+    const sql = 'INSERT INTO chats (user_id, author, message,message_id,channel_id,attachments) VALUES ?';
+    const values = data.map(obj => [obj.user_id, obj.author, obj.message,obj.message_id,obj.channelId,JSON.stringify(obj.attachments)]); 
 
     pool.query(sql, [values], (error, results) => {
         if (error) {

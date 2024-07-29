@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const bodyParser = require('body-parser')
 const { Client, GatewayIntentBits, ChannelType, Events, ActivityType,GuildMessageManager } = require('discord.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { config } = require('./config');
@@ -9,13 +10,13 @@ const processConversation = require("./processConversation")
 const async = require('async');
 
 const app = express();
+app.use(bodyParser.json({ limit: '50mb' })); // Adjust the limit as needed
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 const port = process.env.PORT || 3000;
 const botToken = process.env.DISCORD_BOT_TOKEN
 const mysql = require('mysql');
 const chatsRoute = require("./routes/chatsRoute")
 app.use('/chats',chatsRoute)
-// Create a MySQL connection pool
-
 app.get('/', (req, res) => {
   res.send('Gemini Discord Bot is running!');
 });
@@ -128,11 +129,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.MessageCreate, async (message) => {
-  //First gather past conversation history wrt channel and userId.Then store the chat in database.
   try {
     if (message.author.bot) return;
-
-    //console.log("This is channel : ",message.channelId)
 
     const response = await fetch(`http://localhost:3000/chats/chat?userId=${message.author.id}&channelId=${message.channelId}`);
 
@@ -146,8 +144,28 @@ client.on(Events.MessageCreate, async (message) => {
       finalQuery += item.message + '.'
     });
 
-    console.log(" message : ",message);
+    // Convert attachments to Base64
+    const attachments = await Promise.all(message.attachments.map(async (attachment) => {
+      try {
+        const attachmentResponse = await fetch(attachment.url);
+        if (!attachmentResponse.ok) {
+          throw new Error(`Failed to fetch attachment: ${attachment.url}`);
+        }
+        const arrayBuffer = await attachmentResponse.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const base64 = buffer.toString('base64');
+        return base64
+      } catch (error) {
+        console.error(`Error processing attachment ${attachment.url}:`, error);
+        return null;
+      }
+    }));
 
+    // Filter out null attachments
+    let filteredAttachments = attachments.filter(Boolean);
+    if(!filteredAttachments){
+      filteredAttachments = [];
+    }
     const storeInDatabase = await fetch("http://localhost:3000/chats", {
       method: 'POST',
       headers: {
@@ -159,6 +177,7 @@ client.on(Events.MessageCreate, async (message) => {
         message:message.content,
         message_id:message.id,
         channelId:message.channelId,
+        attachments:filteredAttachments,
       }]),
     });
 
@@ -171,16 +190,17 @@ client.on(Events.MessageCreate, async (message) => {
       
       if (messageContent === '') {
         await message.reply("> `It looks like you didn't say anything. What would you like to talk about?`");
+
         return;
       }
       
       messageContent = "MyFitnessHistory: {" + finalQuery + "} currentFitnessQuery:{" + messageContent + "} "+ "If the currentFitnessQuery DOES NOT requires context then don't consider MyFitnessHistory .If the query is health/fitness related then only respond.Else say that i can answer only health related queries. Additonally Answer in about 1000 characters always"
-    
+      console.log("This is the prompt that goes with tagging : ",messageContent)
       conversationQueue.push({ message, messageContent,analyze:false });
     }
   } catch (error) {
     console.error('Error processing the message:', error);
-    await message.reply('Sorry, something went wrong!');
+    // await message.reply('Sorry, something went wrong!');
   }
 });
 

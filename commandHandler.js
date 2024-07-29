@@ -46,7 +46,7 @@ class CommandHandler {
       });
   
       let messageContent = "Messages from discord channel: " + finalQuery + ".Aggregate the workout stats of every user while classifying these activities into categories. I want only stats. Also,ignore random conversation.Don't give dates.";
-  
+     //let messageContent = "Make a short horror story in 2500 words."
       // Push a task into the queue
       
       conversationQueue.push({ message, messageContent,analyze:true });
