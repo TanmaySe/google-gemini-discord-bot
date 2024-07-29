@@ -214,7 +214,7 @@ async function processConversation({ message, messageContent, analyze }) {
             const attachment = new AttachmentBuilder(fs.readFileSync(pdfPath), { name: 'response.pdf' });
 
             // Send the message with the PDF attachment
-            await message.channel.send({
+            await message.user.send({
                 content: "Here's your report:",
                 files: [attachment]
             });
