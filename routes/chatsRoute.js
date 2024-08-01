@@ -20,7 +20,7 @@ router.get('/chat', (req, res) => {
     console.log("channelId : ",channelId)
     if(userId && channelId){
 
-        const sql = 'SELECT message FROM chats WHERE user_id = ? and channel_id = ?';
+        const sql = 'SELECT message,attachments FROM chats WHERE user_id = ? and channel_id = ?';
     
         pool.query(sql, [userId,channelId], (error, results) => {
             if (error) {

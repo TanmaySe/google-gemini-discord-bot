@@ -192,6 +192,8 @@ async function processConversation({ message, messageContent, analyze }) {
         
             // Trim the response to a maximum of 1700 words
             finalResponse = trimTo1700Words(finalResponse);
+
+            console.log("checking trim length : ",finalResponse.length)
         
             // Split the response into chunks of 2000 characters or less
             const chunks = splitIntoChunks(finalResponse, 1000);
@@ -210,6 +212,7 @@ async function processConversation({ message, messageContent, analyze }) {
         
             // Create PDF and send it to Discord
             const pdfPath = await createPDF(finalResponse);
+            console.log(finalResponse)
             console.log('PDF created:', pdfPath);
             const attachment = new AttachmentBuilder(fs.readFileSync(pdfPath), { name: 'response.pdf' });
 
