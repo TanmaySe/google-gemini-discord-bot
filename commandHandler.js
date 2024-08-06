@@ -6,6 +6,7 @@ class CommandHandler {
     this.commands = {
       clear: this.clearCommand,
       analyze: this.analyzeCommand,
+      log: this.logCommand,
     };
   }
 
@@ -57,56 +58,44 @@ class CommandHandler {
     }
   }
   
+  async logCommand(interaction, workoutStats, conversationManager) {
+    const userId = interaction.user.id;
+    const username = interaction.user.username;
 
-  // async saveCommand(interaction, args, conversationManager) {
-  //   const userId = interaction.user.id;
-  //   const conversation = conversationManager.getHistory(userId);
+    if (!workoutStats) {
+      await interaction.reply({ content: 'Please provide your workout stats after the /log command.', ephemeral: true });
+      return;
+    }
 
-  //   if (conversation.length === 0) {
-  //     await interaction.reply('> `There is no conversation to save.`');
-  //     return;
-  //   }
+    try {
+      const response = await fetch('http://localhost:3000/chats', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([{
+          user_id: userId,
+          author: username,
+          message: workoutStats,
+          message_id: interaction.id,
+          channelId: interaction.channelId,
+          attachments: [],
+          is_log: 1,
+        }]),
+      });
 
-  //   if (interaction.channel.type === ChannelType.DM) {
-  //     await interaction.reply('> `You are already in a DM with me. The conversation is saved here.`');
-  //     return;
-  //   }
-  
-  //   const conversationText = conversation
-  //     .map(line => `${line.role === 'user' ? 'User' : 'Bot'}: ${line.parts[0].text}`)
-  //     .join('\n');
-  
-  //   try {
-  //     const maxLength = 1900;
-  //     const lines = conversationText.split('\n');
-  //     const chunks = [];
-  //     let currentChunk = '';
-  
-  //     for (const line of lines) {
-  //       if (currentChunk.length + line.length + 1 <= maxLength) {
-  //         currentChunk += (currentChunk ? '\n' : '') + line;
-  //       } else {
-  //         chunks.push(currentChunk);
-  //         currentChunk = line;
-  //       }
-  //     }
-  
-  //     if (currentChunk) {
-  //       chunks.push(currentChunk);
-  //     }
-  
-  //     // Send each chunk as a separate message
-  //     for (const [index, chunk] of chunks.entries()) {
-  //       await interaction.user.send(`Here is your saved conversation (part ${index + 1}):` +
-  //         `\n\n${chunk}`);
-  //     }
-  
-  //     await interaction.reply('> `The conversation has been saved and sent to your inbox.`');
-  //   } catch (error) {
-  //     console.error('Error sending conversation to user:', error);
-  //     await interaction.reply('> `Failed to send the conversation to your inbox. Please check your privacy settings.`');
-  //   }
-  // }
+      if (response.ok) {
+        await interaction.reply({ content: 'Your workout has been logged successfully!', ephemeral: true });
+      } else {
+        throw new Error('Failed to log workout');
+      }
+    } catch (error) {
+      console.error('Error logging workout:', error);
+      await interaction.reply({ content: 'Failed to log your workout. Please try again later.', ephemeral: true });
+    }
+  }
 }
+
+ 
 
 module.exports.CommandHandler = CommandHandler;

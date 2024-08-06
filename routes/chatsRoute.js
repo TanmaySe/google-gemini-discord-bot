@@ -7,8 +7,8 @@ router.use(express.json());
 const pool = mysql.createPool({
     host: 'localhost',
     user: 'root',
-    password: 'root123',
-    database: 'fitbot',
+    password: 'root',
+    database: 'fitness_coach',
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
@@ -67,8 +67,16 @@ router.post('/', (req, res) => {
     const data = req.body; 
     console.log(data)
     
-    const sql = 'INSERT INTO chats (user_id, author, message,message_id,channel_id,attachments) VALUES ?';
-    const values = data.map(obj => [obj.user_id, obj.author, obj.message,obj.message_id,obj.channelId,JSON.stringify(obj.attachments)]); 
+    const sql = 'INSERT INTO chats (user_id, author, message,message_id,channel_id,attachments,is_log) VALUES ?';
+    const values = data.map(obj => [
+        obj.user_id, 
+        obj.author, 
+        obj.message,
+        obj.message_id,
+        obj.channelId,
+        obj.attachments ? JSON.stringify(obj.attachments) : '[]', // Handle null attachments
+        obj.is_log || 0 // Default to 0 if is_log is not provided
+    ]);  
 
     pool.query(sql, [values], (error, results) => {
         if (error) {

@@ -10,12 +10,21 @@ const commands = [
     .setName('analyze')
     .setDescription('Analyzes your channel.')
     .setDMPermission(true),
+  new SlashCommandBuilder()
+    .setName('log')
+    .setDescription('Log your workout stats.')
+    .addStringOption(option =>
+      option.setName('stats')
+        .setDescription('Your workout stats')
+        .setRequired(true))
+    .setDMPermission(true),
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
 
 (async () => {
   try {
+    console.log(commands)
     await rest.put(
       Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
       { body: commands },

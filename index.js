@@ -10,6 +10,7 @@ const { ConversationManager } = require('./conversationManager');
 const { CommandHandler } = require('./commandHandler');
 const processConversation = require("./processConversation")
 const async = require('async');
+const setupCronJobs = require('./cron_jobs/workoutReminder');
 
 const app = express();
 app.use(bodyParser.json({ limit: '50mb' })); // Adjust the limit as needed
@@ -40,6 +41,8 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 const conversationManager = new ConversationManager();
 const commandHandler = new CommandHandler();
 const conversationQueue = async.queue(processConversation, 1);
+
+setupCronJobs(client);
 
 const activities = [
   { name: 'Assisting users', type: ActivityType.Playing },
@@ -83,38 +86,25 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  // In the InteractionCreate event handler
+  if(interaction.commandName === "log"){
+    try {
+      const stats = interaction.options.getString('stats');
+      await commandHandler.logCommand(interaction, stats, conversationManager);
+    } catch (error) {
+      console.error('Error handling /log command:', error);
+      try {
+        await interaction.reply({ content: 'Sorry, something went wrong while logging your workout.', ephemeral: true });
+      } catch (replyError) {
+        console.error('Error sending error message:', replyError);
+      }
+    }
+    return;
+  }
+
+
   if (interaction.commandName === 'analyze') {
     try {
-      // const Authorization = "Bot" + " " + botToken
-      // const messageReq = await fetch(`https://discord.com/api/v10/channels/1265532368882499675/messages`, {
-      //   headers: {
-      //       'Authorization': Authorization
-      //   }
-      // });
-      // const data = await messageReq.json()
-      // let filteredArray = [];
-      // console.log(data)
-      // for (let obj of data) {
-      //   if(obj.author.username != "FitnessCoach"){
-      //     let filteredObj = {
-      //       user_id: obj.author.id,
-      //       author: obj.author.username,
-      //       message: obj.content,
-      //       timestamp: obj.timestamp
-      //     };
-      //     filteredArray.push(filteredObj);
-
-      //   }
-        
-      // }
-      // filteredArray.reverse()
-      // const storeInDatabase = await fetch("http://localhost:3000/chats", {
-      //   method: 'POST',
-      //   headers: {
-      //       'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify(filteredArray),
-      // });S
       console.log("interaction : ",interaction.reply)
       await commandHandler.analyzeCommand(interaction, [], conversationManager);
 
