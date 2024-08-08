@@ -94,13 +94,17 @@ async function sendReminder(client, userId) {
   }
 }
 
-function setupCronJobs(client) {
-  cron.schedule('*/600 * * * *', async () => {
+function workoutReminder(client) {
+  // Schedule the cron job to run every day at 9 AM
+  cron.schedule('0 9 * * *', async () => {
     console.log('Running workout reminder cron job');
     try {
       const usersWithoutWorkout = await getUsersWithoutWorkout();
-      for (const userId of usersWithoutWorkout) {
-        await sendReminder(client, userId);
+      for (let i = 0; i < usersWithoutWorkout.length; i++) {
+        const userId = usersWithoutWorkout[i];
+        setTimeout(() => {
+          sendReminder(client, userId);
+        }, i * 1000); // Delay of i * 1000 milliseconds (1 second) for each user
       }
     } catch (error) {
       console.error('Error in workout reminder cron job:', error);
@@ -108,4 +112,5 @@ function setupCronJobs(client) {
   });
 }
 
-module.exports = setupCronJobs;
+
+module.exports = workoutReminder;

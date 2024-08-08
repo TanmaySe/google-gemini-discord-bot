@@ -10,7 +10,8 @@ const { ConversationManager } = require('./conversationManager');
 const { CommandHandler } = require('./commandHandler');
 const processConversation = require("./processConversation")
 const async = require('async');
-const setupCronJobs = require('./cron_jobs/workoutReminder');
+const workoutReminder = require('./cron_jobs/workoutReminder');
+
 
 const app = express();
 app.use(bodyParser.json({ limit: '50mb' })); // Adjust the limit as needed
@@ -18,8 +19,12 @@ app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 const port = process.env.PORT || 3000;
 const botToken = process.env.DISCORD_BOT_TOKEN
 const mysql = require('mysql');
-const chatsRoute = require("./routes/chatsRoute")
+const chatsRoute = require("./routes/chatsRoute");
+const usersRoute = require("./routes/usersRoute")
+const { handleNewMemberEvent } = require('./events/newMember');
+const checkIncompleteUsers = require('./cron_jobs/checkIncompleteUsers');
 app.use('/chats',chatsRoute)
+app.use('/users',usersRoute)
 app.get('/', (req, res) => {
   res.send('Gemini Discord Bot is running!');
 });
@@ -32,6 +37,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
   ],
@@ -42,7 +48,8 @@ const conversationManager = new ConversationManager();
 const commandHandler = new CommandHandler();
 const conversationQueue = async.queue(processConversation, 1);
 
-setupCronJobs(client);
+workoutReminder(client);
+checkIncompleteUsers(client);
 
 const activities = [
   { name: 'Assisting users', type: ActivityType.Playing },
@@ -119,6 +126,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }  
 });
+
+client.on(Events.GuildMemberAdd,handleNewMemberEvent)
 
 client.on(Events.MessageCreate, async (message) => {
   try {
@@ -198,7 +207,8 @@ client.on(Events.MessageCreate, async (message) => {
 
     const isDM = message.channel.type === ChannelType.DM;
     
-    if (isDM || message.mentions.users.has(client.user.id)) {
+    // if (isDM || message.mentions.users.has(client.user.id)) {
+    if (message.mentions.users.has(client.user.id)) {
 
       const attachments = await Promise.all(message.attachments.map(async (attachment) => {
         try {
@@ -255,6 +265,7 @@ client.on(Events.MessageCreate, async (message) => {
       }
       
       messageContent = "MyFitnessHistory: " + finalQuery + " currentFitnessQuery: " + messageContent + "If the currentFitnessQuery DOES NOT requires context then don't consider MyFitnessHistory .If the query is health/fitness related then only respond.Else say that i can answer only health related queries. Additonally Answer in about 1000 characters always"
+
       console.log("This is the prompt that goes with tagging : ",messageContent)
       conversationQueue.push({ message, messageContent,analyze:false });
       const storeInDatabase = await fetch("http://localhost:3000/chats", {
