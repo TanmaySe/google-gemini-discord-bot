@@ -1,20 +1,30 @@
 require('dotenv').config();
 const express = require('express');
+const axios = require("axios")
+const fs = require("fs");
+const bodyParser = require('body-parser')
 const { Client, GatewayIntentBits, ChannelType, Events, ActivityType,GuildMessageManager } = require('discord.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { config } = require('./config');
 const { ConversationManager } = require('./conversationManager');
 const { CommandHandler } = require('./commandHandler');
+const processConversation = require("./processConversation")
 const async = require('async');
+const workoutReminder = require('./cron_jobs/workoutReminder');
+
 
 const app = express();
+app.use(bodyParser.json({ limit: '50mb' })); // Adjust the limit as needed
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 const port = process.env.PORT || 3000;
 const botToken = process.env.DISCORD_BOT_TOKEN
 const mysql = require('mysql');
-const chatsRoute = require("./routes/chatsRoute")
+const chatsRoute = require("./routes/chatsRoute");
+const usersRoute = require("./routes/usersRoute")
+const { handleNewMemberEvent } = require('./events/newMember');
+const checkIncompleteUsers = require('./cron_jobs/checkIncompleteUsers');
 app.use('/chats',chatsRoute)
-// Create a MySQL connection pool
-
+app.use('/users',usersRoute)
 app.get('/', (req, res) => {
   res.send('Gemini Discord Bot is running!');
 });
@@ -27,6 +37,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
   ],
@@ -36,6 +47,9 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 const conversationManager = new ConversationManager();
 const commandHandler = new CommandHandler();
 const conversationQueue = async.queue(processConversation, 1);
+
+workoutReminder(client);
+checkIncompleteUsers(client);
 
 const activities = [
   { name: 'Assisting users', type: ActivityType.Playing },
@@ -79,42 +93,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
-  if (interaction.commandName === 'save') {
+  // In the InteractionCreate event handler
+  if(interaction.commandName === "log"){
     try {
-      const Authorization = "Bot" + " " + botToken
-      const messageReq = await fetch(`https://discord.com/api/v10/channels/1265532368882499675/messages`, {
-        headers: {
-            'Authorization': Authorization
-        }
-      });
-      const data = await messageReq.json()
-      let filteredArray = [];
-      console.log(data)
-      for (let obj of data) {
-        if(obj.author.username != "FitnessCoach"){
-          let filteredObj = {
-            user_id: obj.author.id,
-            author: obj.author.username,
-            message: obj.content,
-            timestamp: obj.timestamp
-          };
-          filteredArray.push(filteredObj);
-
-        }
-        
-      }
-      filteredArray.reverse()
-      const storeInDatabase = await fetch("http://localhost:3000/chats", {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(filteredArray),
-      });
-      
-      //await commandHandler.saveCommand(interaction, [], conversationManager);
+      const stats = interaction.options.getString('stats');
+      await commandHandler.logCommand(interaction, stats, conversationManager);
     } catch (error) {
-      console.error('Error handling /save command:', error);
+      console.error('Error handling /log command:', error);
+      try {
+        await interaction.reply({ content: 'Sorry, something went wrong while logging your workout.', ephemeral: true });
+      } catch (replyError) {
+        console.error('Error sending error message:', replyError);
+      }
+    }
+    return;
+  }
+
+
+  if (interaction.commandName === 'analyze') {
+    try {
+      console.log("interaction : ",interaction.reply)
+      await commandHandler.analyzeCommand(interaction, [], conversationManager);
+
+    } catch (error) {
+      console.error('Error handling /analyze command:', error);
       try {
         await interaction.reply('Sorry, something went wrong while saving your conversation.');
       } catch (replyError) {
@@ -125,101 +127,167 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }  
 });
 
+client.on(Events.GuildMemberAdd,handleNewMemberEvent)
+
 client.on(Events.MessageCreate, async (message) => {
   try {
     if (message.author.bot) return;
+    console.log("message log for attachment type : ",message)
+   
+    // const response = await fetch(`http://localhost:3000/chats/chat?userId=${message.author.id}&channelId=${message.channelId}`);
 
-    console.log("This is message : ",message)
+    // const data = await response.json();
 
-    const response = await fetch(`http://localhost:3000/chats/chat?userId=${message.author.id}`);
+    // console.log(data)
 
-    const data = await response.json();
+    // let finalQuery = ""
 
-    console.log(data)
+    // data.forEach(item => {
+    //   finalQuery += item.message + '.'
+    // });
 
-    let finalQuery = ""
+    // Convert attachments to Base64
+    
+    if(!message.mentions.users.has(client.user.id)){
+      const attachments = await Promise.all(message.attachments.map(async (attachment) => {
+        try {
+          const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    data.forEach(item => {
-      finalQuery += item.message + '.'
-    });
+          const response = await axios.get(attachment.url, { responseType: 'arraybuffer' });
+          const buffer = Buffer.from(response.data, 'binary');
+          const image = {
+            inlineData: {
+              data: buffer.toString('base64'),
+              mimeType: attachment.contentType,
+            },
+          };
+          const prompt = "If this is a fitness related image extract workout stats like calories, duration,sactivities or whatever applicable."
+          const result = await model.generateContent([prompt, image]);
+          return result.response.text()
+        } catch (error) {
+          console.error(`Error processing attachment ${attachment.url}:`, error);
+          return null;
+        }
+      }));
+      const storeInDatabase = await fetch("http://localhost:3000/chats", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([{
+          user_id:message.author.id,
+          author:message.author.username,
+          message:message.content,
+          message_id:message.id,
+          channelId:message.channelId,
+          attachments:attachments,
+        }]),
+      });
+    }
 
-    console.log(finalQuery);
-
-    const storeInDatabase = await fetch("http://localhost:3000/chats", {
-      method: 'POST',
-      headers: {
-          'Content-Type': 'application/json',
-      },
-      body: JSON.stringify([{
-        user_id:message.author.id,
-        author:message.author.username,
-        message:message.content,
-        message_id:message.id
-      }]),
-    });
-
-
+    // // Filter out null attachments
+    // let filteredAttachments = attachments.filter(Boolean);
+    // if(!filteredAttachments){
+    //   filteredAttachments = [];
+    // }
+    // const storeInDatabase = await fetch("http://localhost:3000/chats", {
+    //   method: 'POST',
+    //   headers: {
+    //       'Content-Type': 'application/json',
+    //   },
+    //   body: JSON.stringify([{
+    //     user_id:message.author.id,
+    //     author:message.author.username,
+    //     message:message.content,
+    //     message_id:message.id,
+    //     channelId:message.channelId,
+    //     attachments:filteredAttachments,
+    //   }]),
+    // });
 
     const isDM = message.channel.type === ChannelType.DM;
     
-    if (isDM || message.mentions.users.has(client.user.id)) {
+    // if (isDM || message.mentions.users.has(client.user.id)) {
+    if (message.mentions.users.has(client.user.id)) {
+
+      const attachments = await Promise.all(message.attachments.map(async (attachment) => {
+        try {
+          const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+          const response = await axios.get(attachment.url, { responseType: 'arraybuffer' });
+          const buffer = Buffer.from(response.data, 'binary');
+          const image = {
+            inlineData: {
+              data: buffer.toString('base64'),
+              mimeType: attachment.contentType,
+            },
+          };
+          const prompt = "If this is a fitness related image extract workout stats like calories, duration,sactivities or whatever applicable."
+          const result = await model.generateContent([prompt, image]);
+          return result.response.text()
+
+        } catch (error) {
+          console.error(`Error processing attachment ${attachment.url}:`, error);
+          return null;
+        }
+      }));
+    //  console.log("attachments for testing line 243",attachments)
+      // // Filter out null attachments
+      // let filteredAttachments = attachments.filter(Boolean);
+      // if(!filteredAttachments){
+      //   filteredAttachments = [];
+      // }
+      
+      const response = await fetch(`http://localhost:3000/chats/chat?userId=${message.author.id}&channelId=${message.channelId}`);
+
+      const data = await response.json();
+
+      console.log(data)
+
+      let finalQuery = ""
+
+      console.log(data)
+
+      data.forEach(item => {
+        finalQuery += item.message + '.' + "attachments : "+item.attachments
+      });
+
+      
+
       let messageContent = message.content.replace(new RegExp(`<@!?${client.user.id}>`), '').trim();
+
+      messageContent += "Here are some attachments : " + attachments
       
       if (messageContent === '') {
         await message.reply("> `It looks like you didn't say anything. What would you like to talk about?`");
+
         return;
       }
-      console.log("history check krte hai : ",finalQuery)
-      messageContent = "Context for generating answer : " + finalQuery + "Query : " + messageContent + " "+ "If the query is health/fitness related then only respond.Else say that i can answer only health related queries.Answer in about 1000 characters"
- 
-      conversationQueue.push({ message, messageContent });
+      
+      messageContent = "MyFitnessHistory: " + finalQuery + " currentFitnessQuery: " + messageContent + "If the currentFitnessQuery DOES NOT requires context then don't consider MyFitnessHistory .If the query is health/fitness related then only respond.Else say that i can answer only health related queries. Additonally Answer in about 1000 characters always"
+
+      console.log("This is the prompt that goes with tagging : ",messageContent)
+      conversationQueue.push({ message, messageContent,analyze:false });
+      const storeInDatabase = await fetch("http://localhost:3000/chats", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([{
+          user_id:message.author.id,
+          author:message.author.username,
+          message:message.content,
+          message_id:message.id,
+          channelId:message.channelId,
+          attachments:attachments,
+        }]),
+      });
     }
   } catch (error) {
     console.error('Error processing the message:', error);
-    await message.reply('Sorry, something went wrong!');
+    // await message.reply('Sorry, something went wrong!');
   }
 });
 
-async function processConversation({ message, messageContent }) {
-  try {
-    const typingInterval = 2000;
-    let typingIntervalId;
-
-    // Start the typing indicator
-    const startTyping = async () => {
-      typingIntervalId = setInterval(() => {
-        message.channel.sendTyping();
-      }, typingInterval);
-    };
-
-    // Stop the typing indicator
-    const stopTyping = () => {
-      clearInterval(typingIntervalId);
-    };
-
-    await startTyping();
-
-    const model = await genAI.getGenerativeModel({ model: config.modelName });
-    const chat = model.startChat({
-      history: conversationManager.getHistory(message.author.id),
-      safetySettings: config.safetySettings,
-    });
-    const botMessage = await message.reply('> `Generating a response...`');
-    await conversationManager.handleModelResponse(botMessage, () => chat.sendMessageStream(messageContent), message);
-    
-    await stopTyping();
-    
-    // Check if it's a new conversation or the bot is mentioned
-    if (conversationManager.isNewConversation(message.author.id) || message.mentions.users.has(client.user.id)) {
-      const clearCommandMessage = `
-        > **Remember to use the \`/clear\` command to start a new conversation when needed. This helps to maintain context and ensures that the AI responds accurately to your messages.**
-      `;
-      await message.channel.send(clearCommandMessage);
-    }
-  } catch (error) {
-    console.error('Error processing the conversation:', error);
-    await message.reply('Sorry, something went wrong!');
-  }
-}
 
 client.login(process.env.DISCORD_BOT_TOKEN);
